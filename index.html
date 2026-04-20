@@ -389,8 +389,8 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
                 if (playCtx) { await playCtx.close(); playCtx = null; }
                 
                 // 2. Initialize dual AudioContexts to isolate capture thread from playout thread
-                capCtx = new AudioContext();
-                playCtx = new AudioContext();
+                capCtx = new AudioContext({latencyHint: 'interactive'});
+                playCtx = new AudioContext({latencyHint: 'interactive'});
                 if (capCtx.state === 'suspended') await capCtx.resume().catch(e => console.warn(e));
                 if (playCtx.state === 'suspended') await playCtx.resume().catch(e => console.warn(e));
                 
