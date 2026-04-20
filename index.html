@@ -189,12 +189,13 @@
                 // Directly map target percentage to worklet probability (no feedback loop)
                 const targetPercentage = parseFloat(e.target.value);
                 const targetDelta = (targetPercentage / 100) * 100; // 100 is max glitches per second
-                const prob = (targetDelta / 375) * 100; // 375 audio quantums per second at 48kHz
 
-                if (key === 'capGlitch' && captureGlitchNode) {
+                if (key === 'capGlitch' && captureGlitchNode && capCtx) {
+                    const prob = (targetDelta / (capCtx.sampleRate / 128)) * 100;
                     captureGlitchNode.parameters.get('glitchProbability').value = prob;
                 }
-                if (key === 'playGlitch' && playoutGlitchNode) {
+                if (key === 'playGlitch' && playoutGlitchNode && playCtx) {
+                    const prob = (targetDelta / (playCtx.sampleRate / 128)) * 100;
                     playoutGlitchNode.parameters.get('glitchProbability').value = prob;
                 }
             });
@@ -388,9 +389,8 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
                 if (playCtx) { await playCtx.close(); playCtx = null; }
                 
                 // 2. Initialize dual AudioContexts to isolate capture thread from playout thread
-                // Always use 48000 sample rate
-                capCtx = new AudioContext({ sampleRate: 48000 });
-                playCtx = new AudioContext({ sampleRate: 48000 });
+                capCtx = new AudioContext();
+                playCtx = new AudioContext();
                 if (capCtx.state === 'suspended') await capCtx.resume().catch(e => console.warn(e));
                 if (playCtx.state === 'suspended') await playCtx.resume().catch(e => console.warn(e));
                 
@@ -408,12 +408,16 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
                 sourceAudio.src = URL.createObjectURL(file);
 
                 // Calculate static initial probability
-                const getProb = (sliderVal) => ((parseFloat(sliderVal) / 100) * 100) / 375 * 100;
+                const getProb = (sliderVal, ctx) => {
+                    const targetPercentage = parseFloat(sliderVal);
+                    const targetDelta = (targetPercentage / 100) * 100;
+                    return (targetDelta / (ctx.sampleRate / 128)) * 100;
+                };
 
                 // 3. Setup Capture Audio Graph
                 const sourceNode = capCtx.createMediaElementSource(sourceAudio);
                 captureGlitchNode = new AudioWorkletNode(capCtx, 'glitch-processor');
-                captureGlitchNode.parameters.get('glitchProbability').value = getProb(sliders.capGlitch.el.value);
+                captureGlitchNode.parameters.get('glitchProbability').value = getProb(sliders.capGlitch.el.value, capCtx);
                 captureGlitchNode.parameters.get('stallMs').value = 11;
                 const streamDest = capCtx.createMediaStreamDestination();
                 sourceNode.connect(captureGlitchNode).connect(streamDest);
@@ -509,7 +513,7 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
 
                     const remoteSource = playCtx.createMediaStreamSource(remoteStream);
                     playoutGlitchNode = new AudioWorkletNode(playCtx, 'glitch-processor');
-                    playoutGlitchNode.parameters.get('glitchProbability').value = getProb(sliders.playGlitch.el.value);
+                    playoutGlitchNode.parameters.get('glitchProbability').value = getProb(sliders.playGlitch.el.value, playCtx);
                     playoutGlitchNode.parameters.get('stallMs').value = 11;
                     analyser = playCtx.createAnalyser();
                     
