@@ -185,8 +185,18 @@
                 const suffix = key === 'jitter' ? ' ms' : '%';
                 sliders[key].val.innerText = e.target.value + suffix;
                 updateURL();
-                // We no longer manually set glitchProbability here. 
-                // The PID Controller in updateAudioStats manages it automatically to guarantee the correct number of underruns.
+                
+                // Directly map target percentage to worklet probability (no feedback loop)
+                const targetPercentage = parseFloat(e.target.value);
+                const targetDelta = (targetPercentage / 100) * 100; // 100 is max glitches per second
+                const prob = (targetDelta / 375) * 100; // 375 audio quantums per second at 48kHz
+
+                if (key === 'capGlitch' && captureGlitchNode) {
+                    captureGlitchNode.parameters.get('glitchProbability').value = prob;
+                }
+                if (key === 'playGlitch' && playoutGlitchNode) {
+                    playoutGlitchNode.parameters.get('glitchProbability').value = prob;
+                }
             });
         });
 
@@ -249,8 +259,8 @@
         let statsInterval = null;
 
         const statsState = {
-            cap: { lastUnderruns: 0, internalProb: 0, integral: 0, history: [] },
-            play: { lastUnderruns: 0, internalProb: 0, integral: 0, history: [] }
+            cap: { lastUnderruns: 0, history: [] },
+            play: { lastUnderruns: 0, history: [] }
         };
 
         function updatePlayPauseUI(playing) {
@@ -294,8 +304,8 @@
             }
         });
 
-        // Display AudioPlaybackStats & Control internal PID loop
-        function updateAudioStats(ctx, targetPercentage, outElement, stateObj, node) {
+        // Display AudioPlaybackStats
+        function updateAudioStats(ctx, targetPercentage, outElement, stateObj) {
             if (!ctx) return;
             
             const hasStats = 'playbackStats' in ctx && ctx.playbackStats;
@@ -315,26 +325,6 @@
             // This means maximum independent glitches per second is 100 (1000ms / 10ms)
             const maxUnderrunsPerSec = 100; 
             const targetDelta = (targetPercentage / 100) * maxUnderrunsPerSec;
-
-            if (hasStats && targetPercentage > 0) {
-                // PID controller loop to actively seek the target underrun rate
-                const error = targetDelta - actualUnderrunsPerSec;
-                stateObj.integral += error;
-                stateObj.integral = Math.max(-100, Math.min(100, stateObj.integral)); // Anti-windup
-                
-                stateObj.internalProb = (error * 1.5) + (stateObj.integral * 0.5);
-                stateObj.internalProb = Math.max(0, Math.min(100, stateObj.internalProb));
-            } else if (targetPercentage === 0) {
-                stateObj.internalProb = 0;
-                stateObj.integral = 0;
-            }
-
-            if (node) {
-                // Set the stall threshold strictly >10ms to ensure an underrun
-                const stallTarget = 11;
-                node.parameters.get('stallMs').value = stallTarget;
-                node.parameters.get('glitchProbability').value = stateObj.internalProb;
-            }
 
             // Render stats text
             outElement.innerText = 
@@ -368,16 +358,14 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
         function startStatsLoop() {
             if (statsInterval) clearInterval(statsInterval);
             statsState.cap.lastUnderruns = 0;
-            statsState.cap.integral = 0;
             statsState.cap.history = [];
             statsState.play.lastUnderruns = 0;
-            statsState.play.integral = 0;
             statsState.play.history = [];
 
             statsInterval = setInterval(() => {
                 if (sourceAudio && !sourceAudio.paused) {
-                    updateAudioStats(capCtx, parseFloat(sliders.capGlitch.el.value), captureStatsOut, statsState.cap, captureGlitchNode);
-                    updateAudioStats(playCtx, parseFloat(sliders.playGlitch.el.value), playoutStatsOut, statsState.play, playoutGlitchNode);
+                    updateAudioStats(capCtx, parseFloat(sliders.capGlitch.el.value), captureStatsOut, statsState.cap);
+                    updateAudioStats(playCtx, parseFloat(sliders.playGlitch.el.value), playoutStatsOut, statsState.play);
                     fetchWebRTCStats();
                 }
             }, 1000); // Update every 1 second
@@ -419,9 +407,14 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
                 sourceAudio.loop = true;
                 sourceAudio.src = URL.createObjectURL(file);
 
+                // Calculate static initial probability
+                const getProb = (sliderVal) => ((parseFloat(sliderVal) / 100) * 100) / 375 * 100;
+
                 // 3. Setup Capture Audio Graph
                 const sourceNode = capCtx.createMediaElementSource(sourceAudio);
                 captureGlitchNode = new AudioWorkletNode(capCtx, 'glitch-processor');
+                captureGlitchNode.parameters.get('glitchProbability').value = getProb(sliders.capGlitch.el.value);
+                captureGlitchNode.parameters.get('stallMs').value = 11;
                 const streamDest = capCtx.createMediaStreamDestination();
                 sourceNode.connect(captureGlitchNode).connect(streamDest);
 
@@ -516,6 +509,8 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
 
                     const remoteSource = playCtx.createMediaStreamSource(remoteStream);
                     playoutGlitchNode = new AudioWorkletNode(playCtx, 'glitch-processor');
+                    playoutGlitchNode.parameters.get('glitchProbability').value = getProb(sliders.playGlitch.el.value);
+                    playoutGlitchNode.parameters.get('stallMs').value = 11;
                     analyser = playCtx.createAnalyser();
                     
                     analyser.fftSize = 2048;
