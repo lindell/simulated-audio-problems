@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WebRTC Audio Simulator</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body { background-color: #0f172a; color: #f8fafc; }
+        canvas { filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.5)); }
+        input[type=range] { accent-color: #38bdf8; }
+    </style>
+</head>
+<body class="min-h-screen p-6 font-sans">
+    <div class="max-w-4xl mx-auto space-y-6">
+        <header class="text-center space-y-2">
+            <h1 class="text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-sky-400 to-blue-600">
+                WebRTC Audio Simulator
+            </h1>
+            <p class="text-slate-400">Upload an audio file (MP3, M4A, WAV) to simulate network and hardware audio issues in real-time.</p>
+        </header>
+
+        <!-- Status & Upload -->
+        <div class="bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700 flex flex-col gap-4">
+            <div class="w-full flex flex-col sm:flex-row gap-4">
+                <div class="flex-1">
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Use Predefined Audio</label>
+                    <select id="presetSelect" class="w-full bg-slate-900 border border-slate-700 rounded-md text-slate-300 text-sm p-2 outline-none focus:border-sky-500">
+                        <option value="">-- Choose a preset --</option>
+                        <option value="voip-talk.m4a">VOIP calling talk</option>
+                    </select>
+                </div>
+                <div class="flex-1">
+                    <label class="block text-sm font-medium text-slate-300 mb-2">Or Upload Custom Audio</label>
+                    <input type="file" id="audioInput" accept="audio/*,.mp3,.m4a,.wav,.ogg" class="block w-full text-sm text-slate-400
+                        file:mr-4 file:py-2 file:px-4
+                        file:rounded-full file:border-0
+                        file:text-sm file:font-semibold
+                        file:bg-sky-500/10 file:text-sky-400
+                        hover:file:bg-sky-500/20 cursor-pointer transition-all">
+                </div>
+            </div>
+            
+            <!-- Playback Controls -->
+            <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mt-2">
+                <button id="playPauseBtn" class="bg-sky-500 hover:bg-sky-400 text-slate-900 font-bold py-2 px-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 w-full sm:w-auto" disabled>
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
+                    Play
+                </button>
+                <div id="statusIndicator" class="text-center flex-1 w-full px-4 py-2 rounded-full bg-yellow-500/10 text-yellow-500 text-sm font-semibold border border-yellow-500/20 whitespace-nowrap overflow-hidden text-ellipsis">
+                    Waiting for file...
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Capture Context (AudioContext) -->
+            <div class="bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700 space-y-4">
+                <div class="border-b border-slate-700 pb-2 mb-4">
+                    <h2 class="text-xl font-bold text-slate-200">Capture Audio (AudioContext)</h2>
+                    <p class="text-xs text-slate-400">Applies before encoding</p>
+                </div>
+                
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <label class="text-sm font-medium text-slate-300">Capture Glitches</label>
+                        <span id="capGlitchVal" class="text-sm text-sky-400">0%</span>
+                    </div>
+                    <input type="range" id="capGlitchSlider" min="0" max="100" value="0" class="w-full">
+                    <p class="text-xs text-slate-500 mt-1">Replaces raw audio data with zeroes (mic hardware failure).</p>
+                </div>
+            </div>
+
+            <!-- Network Context (Encoded Streams) -->
+            <div class="bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700 space-y-4">
+                <div class="border-b border-slate-700 pb-2 mb-4">
+                    <h2 class="text-xl font-bold text-slate-200">Network (Encoded Streams)</h2>
+                    <p class="text-xs text-slate-400">Modifies WebRTC encoded packets</p>
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <label class="text-sm font-medium text-slate-300">Audio Codec</label>
+                    </div>
+                    <select id="codecSelect" class="w-full bg-slate-900 border border-slate-700 rounded-md text-slate-300 text-sm p-2 outline-none focus:border-sky-500">
+                        <option value="opus">Opus (Standard)</option>
+                        <option value="red">Opus RED (Redundant Audio Data)</option>
+                    </select>
+                    <p class="text-xs text-slate-500 mt-1">RED sends redundant audio frames to combat packet loss.</p>
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <label class="text-sm font-medium text-slate-300">Packet Loss</label>
+                        <span id="lossVal" class="text-sm text-sky-400">0%</span>
+                    </div>
+                    <input type="range" id="lossSlider" min="0" max="100" value="0" class="w-full">
+                    <p class="text-xs text-slate-500 mt-1">Drops encoded audio frames entirely.</p>
+                </div>
+
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <label class="text-sm font-medium text-slate-300">Simulated Jitter</label>
+                        <span id="jitterVal" class="text-sm text-sky-400">0 ms</span>
+                    </div>
+                    <input type="range" id="jitterSlider" min="0" max="1000" value="0" class="w-full">
+                    <p class="text-xs text-slate-500 mt-1">Adds random delays to encoded frames arriving at the decoder.</p>
+                </div>
+            </div>
+
+            <!-- Playout Context (AudioContext) -->
+            <div class="bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700 space-y-4 md:col-span-2">
+                <div class="border-b border-slate-700 pb-2 mb-4">
+                    <h2 class="text-xl font-bold text-slate-200">Playout Audio (AudioContext)</h2>
+                    <p class="text-xs text-slate-400">Applies after decoding</p>
+                </div>
+                
+                <div>
+                    <div class="flex justify-between mb-1">
+                        <label class="text-sm font-medium text-slate-300">Playout Glitches</label>
+                        <span id="playGlitchVal" class="text-sm text-sky-400">0%</span>
+                    </div>
+                    <input type="range" id="playGlitchSlider" min="0" max="100" value="0" class="w-full">
+                    <p class="text-xs text-slate-500 mt-1">Replaces decoded audio data with zeroes (speaker/OS buffer starvation).</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Visualizer -->
+        <div class="bg-slate-900 rounded-xl shadow-lg border border-slate-700 p-4 h-48 relative overflow-hidden">
+            <div class="absolute top-4 left-4 text-xs font-bold text-slate-500">Output Visualizer</div>
+            <canvas id="visualizer" class="w-full h-full"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // Check for WebRTC Insertable Streams support
+        if (!('RTCRtpSender' in window) || !('createEncodedStreams' in RTCRtpSender.prototype)) {
+            alert("Your browser does not support WebRTC Insertable Streams (createEncodedStreams). Please use Chrome, Edge, or Opera.");
+        }
+
+        // DOM Elements
+        const fileInput = document.getElementById('audioInput');
+        const presetSelect = document.getElementById('presetSelect');
+        const statusIndicator = document.getElementById('statusIndicator');
+        const playPauseBtn = document.getElementById('playPauseBtn');
+        const canvas = document.getElementById('visualizer');
+        const canvasCtx = canvas.getContext('2d');
+        const codecSelect = document.getElementById('codecSelect');
+
+        // Sliders & Labels
+        const sliders = {
+            capGlitch: { el: document.getElementById('capGlitchSlider'), val: document.getElementById('capGlitchVal') },
+            loss: { el: document.getElementById('lossSlider'), val: document.getElementById('lossVal') },
+            jitter: { el: document.getElementById('jitterSlider'), val: document.getElementById('jitterVal') },
+            playGlitch: { el: document.getElementById('playGlitchSlider'), val: document.getElementById('playGlitchVal') }
+        };
+
+        // Update Slider Labels dynamically
+        Object.keys(sliders).forEach(key => {
+            sliders[key].el.addEventListener('input', (e) => {
+                const suffix = key === 'jitter' ? ' ms' : '%';
+                sliders[key].val.innerText = e.target.value + suffix;
+                
+                // Live update AudioWorklet params
+                if (key === 'capGlitch' && captureGlitchNode) {
+                    captureGlitchNode.parameters.get('glitchProbability').value = e.target.value / 1000;
+                }
+                if (key === 'playGlitch' && playoutGlitchNode) {
+                    playoutGlitchNode.parameters.get('glitchProbability').value = e.target.value / 1000;
+                }
+                
+                updateURL();
+            });
+        });
+
+        // Resize Canvas
+        function resizeCanvas() {
+            canvas.width = canvas.clientWidth;
+            canvas.height = canvas.clientHeight;
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        // AudioWorklet Processor Code (Blob execution)
+        const workletCode = `
+        class GlitchProcessor extends AudioWorkletProcessor {
+            static get parameterDescriptors() {
+                return [{ name: 'glitchProbability', defaultValue: 0, minValue: 0, maxValue: 1 }];
+            }
+            constructor() {
+                super();
+                this.glitchRemaining = 0;
+            }
+            process(inputs, outputs, parameters) {
+                const input = inputs[0];
+                const output = outputs[0];
+                if (!input || !output || input.length === 0) return true;
+
+                const prob = parameters.glitchProbability && parameters.glitchProbability.length > 0 ? parameters.glitchProbability[0] : 0;
+
+                // Randomly trigger a glitch block
+                if (this.glitchRemaining <= 0 && Math.random() < prob) {
+                    this.glitchRemaining = Math.floor(Math.random() * 45) + 5; 
+                }
+
+                for (let channel = 0; channel < input.length; channel++) {
+                    const inData = input[channel];
+                    const outData = output[channel];
+                    
+                    if (!outData) continue;
+
+                    if (this.glitchRemaining > 0) {
+                        for (let i = 0; i < inData.length; i++) outData[i] = 0; // Zero out data
+                    } else {
+                        for (let i = 0; i < inData.length; i++) outData[i] = inData[i]; // Pass through
+                    }
+                }
+
+                if (this.glitchRemaining > 0) this.glitchRemaining--;
+                return true;
+            }
+        }
+        registerProcessor('glitch-processor', GlitchProcessor);
+        `;
+
+        // Global Variables
+        let audioCtx, analyser, sourceAudio, dummyAudio;
+        let captureGlitchNode, playoutGlitchNode;
+        let isGraphRunning = false;
+        let pc1, pc2;
+        let currentFile = null;
+
+        function updatePlayPauseUI(playing) {
+            if (playing) {
+                playPauseBtn.innerHTML = `<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zM7 8a1 1 0 012 0v4a1 1 0 11-2 0V8zm5-1a1 1 0 00-1 1v4a1 1 0 102 0V8a1 1 0 00-1-1z" clip-rule="evenodd"></path></svg> Pause`;
+                playPauseBtn.classList.remove('bg-sky-500', 'hover:bg-sky-400');
+                playPauseBtn.classList.add('bg-amber-500', 'hover:bg-amber-400');
+            } else {
+                playPauseBtn.innerHTML = `<svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg> Play`;
+                playPauseBtn.classList.remove('bg-amber-500', 'hover:bg-amber-400');
+                playPauseBtn.classList.add('bg-sky-500', 'hover:bg-sky-400');
+            }
+        }
+
+        playPauseBtn.addEventListener('click', async () => {
+            if (!currentFile) return;
+
+            // Start pipeline if it wasn't initialized
+            if (!sourceAudio) {
+                await initPipeline(currentFile);
+                return;
+            }
+
+            if (sourceAudio.paused) {
+                if (audioCtx && audioCtx.state === 'suspended') await audioCtx.resume();
+                try {
+                    await sourceAudio.play();
+                    if (dummyAudio && dummyAudio.paused) dummyAudio.play().catch(e => console.warn(e));
+                    updatePlayPauseUI(true);
+                    statusIndicator.className = "text-center flex-1 w-full px-4 py-2 rounded-full bg-emerald-500/10 text-emerald-400 text-sm font-semibold border border-emerald-500/20 whitespace-nowrap overflow-hidden text-ellipsis";
+                    statusIndicator.innerText = "Playing & Simulating";
+                } catch (e) {
+                    console.error("Playback failed", e);
+                }
+            } else {
+                sourceAudio.pause();
+                if (dummyAudio) dummyAudio.pause();
+                updatePlayPauseUI(false);
+                statusIndicator.className = "text-center flex-1 w-full px-4 py-2 rounded-full bg-yellow-500/10 text-yellow-500 text-sm font-semibold border border-yellow-500/20 whitespace-nowrap overflow-hidden text-ellipsis";
+                statusIndicator.innerText = "Paused";
+            }
+        });
+
+        async function initPipeline(file) {
+            try {
+                console.log("[Simulator] 1. Starting pipeline initialization...");
+                playPauseBtn.disabled = false;
+                statusIndicator.className = "text-center flex-1 w-full px-4 py-2 rounded-full bg-blue-500/10 text-blue-400 text-sm font-semibold border border-blue-500/20 overflow-hidden text-ellipsis";
+                statusIndicator.innerText = "Initializing Pipeline... (Check Console)";
+
+                // 1. Cleanup previous runs fully
+                console.log("[Simulator] 2. Cleaning up previous state...");
+                if (pc1) { pc1.close(); pc1 = null; }
+                if (pc2) { pc2.close(); pc2 = null; }
+                if (dummyAudio) { dummyAudio.pause(); dummyAudio.srcObject = null; dummyAudio = null; }
+                if (sourceAudio) { sourceAudio.pause(); sourceAudio.removeAttribute('src'); sourceAudio.load(); sourceAudio = null; }
+                
+                // 2. Initialize AudioContext
+                console.log("[Simulator] 3. Initializing/Resuming AudioContext...");
+                if (!audioCtx) audioCtx = new AudioContext();
+                if (audioCtx.state === 'suspended') await audioCtx.resume().catch(e => console.warn("Context resume deferred"));
+                
+                // Load AudioWorklet
+                console.log("[Simulator] 4. Loading AudioWorklet module...");
+                const blob = new Blob([workletCode], { type: 'application/javascript' });
+                await audioCtx.audioWorklet.addModule(URL.createObjectURL(blob));
+
+                // Generate dynamic audio element
+                console.log("[Simulator] 5. Creating audio element and loading file...");
+                sourceAudio = new Audio();
+                sourceAudio.loop = true;
+                sourceAudio.src = URL.createObjectURL(file);
+
+                // 3. Setup Audio Graph (Capture Side)
+                console.log("[Simulator] 6. Setting up capture Audio Graph...");
+                const sourceNode = audioCtx.createMediaElementSource(sourceAudio);
+                captureGlitchNode = new AudioWorkletNode(audioCtx, 'glitch-processor');
+                const streamDest = audioCtx.createMediaStreamDestination();
+
+                captureGlitchNode.parameters.get('glitchProbability').value = sliders.capGlitch.el.value / 1000;
+                sourceNode.connect(captureGlitchNode).connect(streamDest);
+
+                // 4. Setup WebRTC Loopback
+                console.log("[Simulator] 7. Setting up WebRTC PeerConnections...");
+                
+                pc1 = new RTCPeerConnection(); 
+                pc2 = new RTCPeerConnection({ encodedInsertableStreams: true });
+
+                pc1.onconnectionstatechange = () => console.log(`[Simulator] PC1 State: ${pc1.connectionState}`);
+                pc2.onconnectionstatechange = () => console.log(`[Simulator] PC2 State: ${pc2.connectionState}`);
+
+                // Use Queues to prevent ICE candidate race conditions
+                const iceQueue1 = [];
+                const iceQueue2 = [];
+
+                pc1.onicecandidate = e => {
+                    if (e.candidate) {
+                        if (pc2.remoteDescription && pc2.remoteDescription.type) pc2.addIceCandidate(e.candidate).catch(console.error);
+                        else iceQueue1.push(e.candidate);
+                    }
+                };
+                pc2.onicecandidate = e => {
+                    if (e.candidate) {
+                        if (pc1.remoteDescription && pc1.remoteDescription.type) pc1.addIceCandidate(e.candidate).catch(console.error);
+                        else iceQueue2.push(e.candidate);
+                    }
+                };
+
+                // Transmit stream
+                console.log("[Simulator] 8. Adding tracks to PC1...");
+                const tracks = streamDest.stream.getTracks();
+                if (tracks.length === 0) throw new Error("No audio tracks found in streamDest!");
+                tracks.forEach(track => pc1.addTrack(track, streamDest.stream));
+
+                // --- SET CODEC PREFERENCES ---
+                console.log("[Simulator] 8b. Setting Codec Preferences...");
+                const transceivers = pc1.getTransceivers();
+                if (transceivers.length > 0 && RTCRtpSender.getCapabilities) {
+                    const capabilities = RTCRtpSender.getCapabilities('audio');
+                    const codecs = capabilities.codecs;
+                    const preferred = codecSelect.value;
+                    let targetCodecs = [];
+                    
+                    if (preferred === 'red') {
+                        // Put RED first, then Opus
+                        const red = codecs.find(c => c.mimeType.toLowerCase() === 'audio/red');
+                        const opus = codecs.find(c => c.mimeType.toLowerCase() === 'audio/opus');
+                        if (red) targetCodecs.push(red);
+                        if (opus) targetCodecs.push(opus);
+                    } else {
+                        // Put Opus first
+                        const opus = codecs.find(c => c.mimeType.toLowerCase() === 'audio/opus');
+                        if (opus) targetCodecs.push(opus);
+                    }
+                    
+                    // Append the rest of the codecs
+                    codecs.forEach(c => {
+                        if (!targetCodecs.includes(c)) targetCodecs.push(c);
+                    });
+                    
+                    transceivers[0].setCodecPreferences(targetCodecs);
+                    console.log(`[Simulator] Preferred codec set to: ${preferred.toUpperCase()}`);
+                }
+
+                // Receive stream
+                pc2.ontrack = async (e) => {
+                    console.log("[Simulator] 12. Track received on PC2!");
+                    const receiver = e.receiver;
+                    
+                    // --- INSERTABLE STREAMS: Packet Loss & Jitter ---
+                    if (receiver.createEncodedStreams) {
+                        console.log("[Simulator] 13. Setting up Insertable Streams...");
+                        const streams = receiver.createEncodedStreams();
+                        const reader = streams.readable.getReader();
+                        const writer = streams.writable.getWriter();
+
+                        async function processEncodedFrames() {
+                            let frameCount = 0;
+                            while (true) {
+                                const { done, value: frame } = await reader.read();
+                                if (done) {
+                                    console.log("[Simulator] Stream closed.");
+                                    break;
+                                }
+                                
+                                if (frameCount === 0) console.log("[Simulator] 14. First encoded frame intercepted!");
+                                frameCount++;
+
+                                const lossPercentage = parseFloat(sliders.loss.el.value);
+                                
+                                // Packet Loss: Drop the frame
+                                if (Math.random() * 100 < lossPercentage) {
+                                    continue; // Skip writing this frame
+                                }
+
+                                // Jitter: Stall the pipeline to simulate network delay spikes
+                                const jitterMax = parseFloat(sliders.jitter.el.value);
+                                if (jitterMax > 0) {
+                                    const delay = Math.random() * jitterMax;
+                                    await new Promise(r => setTimeout(r, delay));
+                                }
+
+                                // Write the frame (must be awaited to prevent WritableStream errors)
+                                try {
+                                    await writer.write(frame);
+                                } catch (err) {
+                                    console.error("Stream write error:", err);
+                                    break;
+                                }
+                            }
+                        }
+                        processEncodedFrames();
+                    } else {
+                        console.warn("[Simulator] createEncodedStreams not available on receiver!");
+                    }
+
+                    // 5. Setup Audio Graph (Playout Side)
+                    console.log("[Simulator] 15. Setting up playout Audio Graph...");
+                    const remoteStream = e.streams[0];
+
+                    // CRITICAL FIX: Chrome requires remote WebRTC streams to be attached to an <audio> element to output to AudioContext
+                    dummyAudio = new Audio();
+                    dummyAudio.srcObject = remoteStream;
+                    dummyAudio.muted = true; // Mute it so we only hear the glitched Web Audio output
+                    // Only attempt to play the dummy if we aren't blocked by autoplay
+                    dummyAudio.play().catch(e => console.warn("[Simulator] Dummy Audio autoplay prevented until user interaction."));
+
+                    const remoteSource = audioCtx.createMediaStreamSource(remoteStream);
+                    playoutGlitchNode = new AudioWorkletNode(audioCtx, 'glitch-processor');
+                    analyser = audioCtx.createAnalyser();
+                    
+                    analyser.fftSize = 2048;
+
+                    playoutGlitchNode.parameters.get('glitchProbability').value = sliders.playGlitch.el.value / 1000;
+
+                    remoteSource.connect(playoutGlitchNode).connect(analyser).connect(audioCtx.destination);
+                    console.log("[Simulator] 16. Playout setup complete. Starting visualizer...");
+
+                    if (!isGraphRunning) {
+                        isGraphRunning = true;
+                        drawVisualizer();
+                    }
+                };
+
+                // SDP Negotiation & flush ICE queues
+                console.log("[Simulator] 9. Creating and setting Offer...");
+                const offer = await pc1.createOffer();
+                await pc1.setLocalDescription(offer);
+                await pc2.setRemoteDescription(offer);
+                for (const c of iceQueue1) await pc2.addIceCandidate(c).catch(console.error);
+                iceQueue1.length = 0;
+                
+                console.log("[Simulator] 10. Creating and setting Answer...");
+                const answer = await pc2.createAnswer();
+                await pc2.setLocalDescription(answer);
+                await pc1.setRemoteDescription(answer);
+                for (const c of iceQueue2) await pc1.addIceCandidate(c).catch(console.error);
+                iceQueue2.length = 0;
+
+                console.log("[Simulator] 11. Negotiation complete. Playing source audio...");
+                
+                // Attempt to play (Catch autoplay blocks)
+                try {
+                    await sourceAudio.play();
+                    updatePlayPauseUI(true);
+                    statusIndicator.className = "text-center flex-1 w-full px-4 py-2 rounded-full bg-emerald-500/10 text-emerald-400 text-sm font-semibold border border-emerald-500/20 whitespace-nowrap overflow-hidden text-ellipsis";
+                    statusIndicator.innerText = "Playing & Simulating";
+                } catch (playErr) {
+                    console.warn("[Simulator] Autoplay prevented. Waiting for user interaction.", playErr);
+                    statusIndicator.className = "text-center flex-1 w-full px-4 py-2 rounded-full bg-yellow-500/10 text-yellow-500 text-sm font-semibold border border-yellow-500/20 whitespace-nowrap overflow-hidden text-ellipsis";
+                    statusIndicator.innerText = "Ready - Click Play to start";
+                    updatePlayPauseUI(false);
+                }
+
+            } catch (err) {
+                console.error("[Simulator] Pipeline initialization failed:", err);
+                statusIndicator.className = "text-center flex-1 w-full px-4 py-2 rounded-full bg-red-500/10 text-red-500 text-sm font-semibold border border-red-500/20 overflow-hidden text-ellipsis";
+                statusIndicator.innerText = "Error: " + err.message;
+            }
+        }
+
+        // File upload event
+        fileInput.addEventListener('change', async (e) => {
+            const file = e.target.files[0];
+            if (file) {
+                presetSelect.value = ''; // clear preset dropdown
+                updateURL();
+                currentFile = file;
+                await initPipeline(file);
+            }
+        });
+
+        // Preset dropdown event
+        presetSelect.addEventListener('change', async (e) => {
+            updateURL();
+            if (e.target.value) {
+                fileInput.value = ''; // clear custom upload input
+                await loadPreset(e.target.value);
+            } else {
+                // If set back to empty, stop any playing simulation
+                if (pc1) { pc1.close(); pc1 = null; }
+                if (pc2) { pc2.close(); pc2 = null; }
+                if (sourceAudio) { sourceAudio.pause(); sourceAudio = null; }
+                updatePlayPauseUI(false);
+                playPauseBtn.disabled = true;
+                statusIndicator.className = "text-center flex-1 w-full px-4 py-2 rounded-full bg-yellow-500/10 text-yellow-500 text-sm font-semibold border border-yellow-500/20 whitespace-nowrap overflow-hidden text-ellipsis";
+                statusIndicator.innerText = "Waiting for file...";
+            }
+        });
+
+        async function loadPreset(url) {
+            try {
+                playPauseBtn.disabled = false;
+                statusIndicator.className = "text-center flex-1 w-full px-4 py-2 rounded-full bg-blue-500/10 text-blue-400 text-sm font-semibold border border-blue-500/20 overflow-hidden text-ellipsis";
+                statusIndicator.innerText = "Downloading preset audio...";
+                
+                const response = await fetch(url);
+                if (!response.ok) throw new Error("Failed to fetch preset file. Check if '" + url + "' exists.");
+                
+                const blob = await response.blob();
+                currentFile = blob;
+                await initPipeline(blob);
+            } catch (err) {
+                console.error("Error loading preset:", err);
+                statusIndicator.className = "text-center flex-1 w-full px-4 py-2 rounded-full bg-red-500/10 text-red-500 text-sm font-semibold border border-red-500/20 overflow-hidden text-ellipsis";
+                statusIndicator.innerText = "Error: " + err.message;
+            }
+        }
+
+        // Restart pipeline if codec is changed mid-call
+        codecSelect.addEventListener('change', async () => {
+            updateURL();
+            if (currentFile) {
+                console.log("[Simulator] Codec changed, restarting pipeline...");
+                await initPipeline(currentFile);
+            }
+        });
+
+        // URL State Management
+        function updateURL() {
+            const params = new URLSearchParams(window.location.search);
+            params.set('capGlitch', sliders.capGlitch.el.value);
+            params.set('loss', sliders.loss.el.value);
+            params.set('jitter', sliders.jitter.el.value);
+            params.set('playGlitch', sliders.playGlitch.el.value);
+            params.set('codec', codecSelect.value);
+            
+            if (presetSelect.value) {
+                params.set('preset', presetSelect.value);
+            } else {
+                params.delete('preset');
+            }
+            
+            // Replace history state to prevent breaking the back button
+            // Wrapped in try-catch to prevent SecurityErrors in sandboxed/blob environments
+            try {
+                window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
+            } catch (e) {
+                console.warn("[Simulator] Could not update URL state (likely running in a sandbox/blob):", e.message);
+            }
+        }
+
+        function loadStateFromURL() {
+            const params = new URLSearchParams(window.location.search);
+            let hasParams = false;
+
+            if (params.has('capGlitch')) { sliders.capGlitch.el.value = params.get('capGlitch'); hasParams = true; }
+            if (params.has('loss')) { sliders.loss.el.value = params.get('loss'); hasParams = true; }
+            if (params.has('jitter')) { sliders.jitter.el.value = params.get('jitter'); hasParams = true; }
+            if (params.has('playGlitch')) { sliders.playGlitch.el.value = params.get('playGlitch'); hasParams = true; }
+            if (params.has('codec')) { codecSelect.value = params.get('codec'); hasParams = true; }
+            
+            // Trigger visual label updates manually
+            if (hasParams) {
+                Object.keys(sliders).forEach(key => sliders[key].el.dispatchEvent(new Event('input')));
+            }
+
+            if (params.has('preset')) {
+                presetSelect.value = params.get('preset');
+                if (presetSelect.value) {
+                    loadPreset(presetSelect.value);
+                }
+            } else {
+                // Pre-select and auto-load the first predefined audio on first visit
+                presetSelect.value = "voip-talk.m4a";
+                updateURL();
+                loadPreset("voip-talk.m4a");
+            }
+        }
+
+        // Initialize state on first page load
+        loadStateFromURL();
+
+        // Visualization loop
+        function drawVisualizer() {
+            requestAnimationFrame(drawVisualizer);
+            if (!analyser) return;
+
+            const bufferLength = analyser.frequencyBinCount;
+            const dataArray = new Uint8Array(bufferLength);
+            analyser.getByteTimeDomainData(dataArray);
+
+            canvasCtx.fillStyle = '#0f172a';
+            canvasCtx.fillRect(0, 0, canvas.width, canvas.height);
+
+            canvasCtx.lineWidth = 2;
+            canvasCtx.strokeStyle = '#38bdf8';
+            canvasCtx.beginPath();
+
+            const sliceWidth = canvas.width * 1.0 / bufferLength;
+            let x = 0;
+
+            for (let i = 0; i < bufferLength; i++) {
+                const v = dataArray[i] / 128.0;
+                const y = v * canvas.height / 2;
+
+                if (i === 0) canvasCtx.moveTo(x, y);
+                else canvasCtx.lineTo(x, y);
+
+                x += sliceWidth;
+            }
+
+            canvasCtx.lineTo(canvas.width, canvas.height / 2);
+            canvasCtx.stroke();
+        }
+    </script>
+</body>
+</html>
