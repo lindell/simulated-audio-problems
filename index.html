@@ -1,35 +1,50 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>WebRTC Audio Simulator</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
-        body { background-color: #0f172a; color: #f8fafc; }
-        canvas { filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.5)); }
-        input[type=range] { accent-color: #38bdf8; }
+        body {
+            background-color: #0f172a;
+            color: #f8fafc;
+        }
+
+        canvas {
+            filter: drop-shadow(0 0 5px rgba(56, 189, 248, 0.5));
+        }
+
+        input[type=range] {
+            accent-color: #38bdf8;
+        }
     </style>
 </head>
+
 <body class="min-h-screen p-6 font-sans">
     <div class="max-w-4xl mx-auto space-y-6">
         <header class="text-center space-y-2">
             <h1 class="text-4xl font-extrabold bg-clip-text text-transparent bg-gradient-to-r from-sky-400 to-blue-600">
                 WebRTC Audio Simulator
             </h1>
-            <p class="text-slate-400">Upload an audio file (MP3, M4A, WAV) to simulate network and hardware audio issues in real-time.</p>
+            <p class="text-slate-400">Upload an audio file (MP3, M4A, WAV) to simulate network and hardware audio issues
+                in real-time.</p>
         </header>
 
         <!-- Status & Upload -->
         <div class="bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700 flex flex-col gap-4">
-            <div id="unsupportedWarning" class="hidden w-full p-4 mb-2 rounded-md bg-red-500/20 text-red-400 border border-red-500/50 text-sm font-semibold text-center">
-                Your browser does not support WebRTC Insertable Streams (createEncodedStreams). Please use Chrome, Edge, or Opera.
+            <div id="unsupportedWarning"
+                class="hidden w-full p-4 mb-2 rounded-md bg-red-500/20 text-red-400 border border-red-500/50 text-sm font-semibold text-center">
+                Your browser does not support WebRTC Insertable Streams (createEncodedStreams). Please use Chrome, Edge,
+                or Opera.
             </div>
 
             <div class="w-full flex flex-col sm:flex-row gap-4">
                 <div class="flex-1">
                     <label class="block text-sm font-medium text-slate-300 mb-2">Use Predefined Audio</label>
-                    <select id="presetSelect" class="w-full bg-slate-900 border border-slate-700 rounded-md text-slate-300 text-sm p-2 outline-none focus:border-sky-500">
+                    <select id="presetSelect"
+                        class="w-full bg-slate-900 border border-slate-700 rounded-md text-slate-300 text-sm p-2 outline-none focus:border-sky-500">
                         <option value="">-- Choose a preset --</option>
                         <option value="voip-talk.m4a">VOIP calling talk</option>
                     </select>
@@ -44,14 +59,21 @@
                         hover:file:bg-sky-500/20 cursor-pointer transition-all">
                 </div>
             </div>
-            
+
             <!-- Playback Controls -->
             <div class="flex flex-col sm:flex-row items-center justify-between gap-4 mt-2">
-                <button id="playPauseBtn" class="bg-sky-500 hover:bg-sky-400 text-slate-900 font-bold py-2 px-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 w-full sm:w-auto" disabled>
-                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z" clip-rule="evenodd"></path></svg>
+                <button id="playPauseBtn"
+                    class="bg-sky-500 hover:bg-sky-400 text-slate-900 font-bold py-2 px-8 rounded-full transition-colors disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2 w-full sm:w-auto"
+                    disabled>
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                        <path fill-rule="evenodd"
+                            d="M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z"
+                            clip-rule="evenodd"></path>
+                    </svg>
                     Play
                 </button>
-                <div id="statusIndicator" class="text-center flex-1 w-full px-4 py-2 rounded-full bg-yellow-500/10 text-yellow-500 text-sm font-semibold border border-yellow-500/20 whitespace-nowrap overflow-hidden text-ellipsis">
+                <div id="statusIndicator"
+                    class="text-center flex-1 w-full px-4 py-2 rounded-full bg-yellow-500/10 text-yellow-500 text-sm font-semibold border border-yellow-500/20 whitespace-nowrap overflow-hidden text-ellipsis">
                     Waiting for file...
                 </div>
             </div>
@@ -64,14 +86,15 @@
                     <h2 class="text-xl font-bold text-slate-200">Capture Audio (AudioContext)</h2>
                     <p class="text-xs text-slate-400">Applies before encoding</p>
                 </div>
-                
+
                 <div>
                     <div class="flex justify-between mb-1">
                         <label class="text-sm font-medium text-slate-300">Capture Glitches (Target %)</label>
                         <span id="capGlitchVal" class="text-sm text-sky-400">0%</span>
                     </div>
                     <input type="range" id="capGlitchSlider" min="0" max="100" value="0" class="w-full">
-                    <p class="text-xs text-slate-500 mt-1">Stalls capture thread via dynamic feedback loop to cause underruns.</p>
+                    <p class="text-xs text-slate-500 mt-1">Stalls capture thread via dynamic feedback loop to cause
+                        underruns.</p>
                 </div>
             </div>
 
@@ -86,7 +109,8 @@
                     <div class="flex justify-between mb-1">
                         <label class="text-sm font-medium text-slate-300">Audio Codec</label>
                     </div>
-                    <select id="codecSelect" class="w-full bg-slate-900 border border-slate-700 rounded-md text-slate-300 text-sm p-2 outline-none focus:border-sky-500">
+                    <select id="codecSelect"
+                        class="w-full bg-slate-900 border border-slate-700 rounded-md text-slate-300 text-sm p-2 outline-none focus:border-sky-500">
                         <option value="opus">Opus (Standard)</option>
                         <option value="red">Opus RED (Redundant Audio Data)</option>
                     </select>
@@ -108,7 +132,8 @@
                         <span id="jitterVal" class="text-sm text-sky-400">0 ms</span>
                     </div>
                     <input type="range" id="jitterSlider" min="0" max="1000" value="0" class="w-full">
-                    <p class="text-xs text-slate-500 mt-1">Adds random delays to encoded frames arriving at the decoder.</p>
+                    <p class="text-xs text-slate-500 mt-1">Adds random delays to encoded frames arriving at the decoder.
+                    </p>
                 </div>
             </div>
 
@@ -118,14 +143,15 @@
                     <h2 class="text-xl font-bold text-slate-200">Playout Audio (AudioContext)</h2>
                     <p class="text-xs text-slate-400">Applies after decoding</p>
                 </div>
-                
+
                 <div>
                     <div class="flex justify-between mb-1">
                         <label class="text-sm font-medium text-slate-300">Playout Glitches (Target %)</label>
                         <span id="playGlitchVal" class="text-sm text-sky-400">0%</span>
                     </div>
                     <input type="range" id="playGlitchSlider" min="0" max="100" value="0" class="w-full">
-                    <p class="text-xs text-slate-500 mt-1">Stalls playout thread via dynamic feedback loop to cause starvation.</p>
+                    <p class="text-xs text-slate-500 mt-1">Stalls playout thread via dynamic feedback loop to cause
+                        starvation.</p>
                 </div>
             </div>
         </div>
@@ -136,20 +162,27 @@
             <div class="md:col-span-3 grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div class="bg-slate-900 rounded-xl shadow-lg border border-slate-700 p-4">
                     <h3 class="text-sm font-bold text-sky-400 mb-2">Capture Context Stats (Underruns)</h3>
-                    <div id="captureStatsOut" class="text-slate-300 font-mono text-xs whitespace-pre-wrap leading-relaxed">Waiting for pipeline...</div>
+                    <div id="captureStatsOut"
+                        class="text-slate-300 font-mono text-xs whitespace-pre-wrap leading-relaxed">Waiting for
+                        pipeline...</div>
                 </div>
                 <div class="bg-slate-900 rounded-xl shadow-lg border border-slate-700 p-4">
                     <h3 class="text-sm font-bold text-sky-400 mb-2">Playout Context Stats (Underruns)</h3>
-                    <div id="playoutStatsOut" class="text-slate-300 font-mono text-xs whitespace-pre-wrap leading-relaxed">Waiting for pipeline...</div>
+                    <div id="playoutStatsOut"
+                        class="text-slate-300 font-mono text-xs whitespace-pre-wrap leading-relaxed">Waiting for
+                        pipeline...</div>
                 </div>
                 <div class="bg-slate-900 rounded-xl shadow-lg border border-slate-700 p-4">
                     <h3 class="text-sm font-bold text-sky-400 mb-2">WebRTC Inbound Stats (RTP)</h3>
-                    <div id="webrtcStatsOut" class="text-slate-300 font-mono text-xs whitespace-pre-wrap leading-relaxed">Waiting for pipeline...</div>
+                    <div id="webrtcStatsOut"
+                        class="text-slate-300 font-mono text-xs whitespace-pre-wrap leading-relaxed">Waiting for
+                        pipeline...</div>
                 </div>
             </div>
 
             <!-- Waveform -->
-            <div class="bg-slate-900 rounded-xl shadow-lg border border-slate-700 p-4 h-32 md:col-span-3 relative overflow-hidden">
+            <div
+                class="bg-slate-900 rounded-xl shadow-lg border border-slate-700 p-4 h-32 md:col-span-3 relative overflow-hidden">
                 <div class="absolute top-4 left-4 text-xs font-bold text-slate-500">Output Visualizer</div>
                 <canvas id="visualizer" class="w-full h-full"></canvas>
             </div>
@@ -192,18 +225,15 @@
                 const suffix = key === 'jitter' ? ' ms' : '%';
                 sliders[key].val.innerText = e.target.value + suffix;
                 updateURL();
-                
-                // Directly map target percentage to worklet probability
-                const targetPercentage = parseFloat(e.target.value);
-                const targetDelta = (targetPercentage / 100) * 100; // 100 is roughly max underruns per second
+
+                // Directly map target ratio to worklet probability
+                const targetRatio = parseFloat(e.target.value) / 100;
 
                 if (key === 'capGlitch' && captureGlitchNode && capCtx) {
-                    const prob = (targetDelta / (capCtx.sampleRate / 128)) * 100;
-                    captureGlitchNode.parameters.get('glitchProbability').value = prob;
+                    captureGlitchNode.parameters.get('glitchProbability').value = targetRatio / (capCtx.sampleRate / 128) * 100;
                 }
                 if (key === 'playGlitch' && playoutGlitchNode && playCtx) {
-                    const prob = (targetDelta / (playCtx.sampleRate / 128)) * 100;
-                    playoutGlitchNode.parameters.get('glitchProbability').value = prob;
+                    playoutGlitchNode.parameters.get('glitchProbability').value = targetRatio / (playCtx.sampleRate / 128) * 100;
                 }
             });
         });
@@ -222,7 +252,7 @@
         class GlitchProcessor extends AudioWorkletProcessor {
             static get parameterDescriptors() {
                 return [
-                    { name: 'glitchProbability', defaultValue: 0, minValue: 0, maxValue: 100 },
+                    { name: 'glitchProbability', defaultValue: 0, minValue: 0, maxValue: 1 },
                     { name: 'stallIterations', defaultValue: 500000, minValue: 0, maxValue: 100000000 }
                 ];
             }
@@ -245,7 +275,7 @@
                 const prob = parameters.glitchProbability && parameters.glitchProbability.length > 0 ? parameters.glitchProbability[0] : 0;
                 const iters = parameters.stallIterations && parameters.stallIterations.length > 0 ? parameters.stallIterations[0] : 500000;
 
-                if (prob > 0 && Math.random() * 100 < prob) {
+                if (prob > 0 && Math.random() < prob) {
                     // Intentionally stall the thread using a calculated mathematical load.
                     // The main thread's feedback loop determines how many iterations are needed to cause exactly 1 underrun.
                     let dummy = 0;
@@ -273,8 +303,8 @@
 
         // Tracks state for the feedback loop. currentIterations adjusts up/down to hit the target glitch %
         const statsState = {
-            cap: { lastUnderruns: 0, history: [], currentIterations: 500000 },
-            play: { lastUnderruns: 0, history: [], currentIterations: 500000 }
+            cap: { history: [], currentIterations: 500000 },
+            play: { history: [], currentIterations: 500000 }
         };
 
         function updatePlayPauseUI(playing) {
@@ -319,43 +349,47 @@
         });
 
         // Display AudioPlaybackStats and run Feedback Loop
-        function updateAudioStats(ctx, targetPercentage, outElement, stateObj, glitchNode) {
+        function updateAudioStats(ctx, targetRatio, outElement, stateObj, glitchNode) {
             if (!ctx) return;
-            
-            const hasStats = 'playbackStats' in ctx && ctx.playbackStats;
-            let currentUnderruns = hasStats ? (ctx.playbackStats.underrunEvents || 0) : 0;
-            
-            stateObj.lastUnderruns = currentUnderruns;
 
-            // Track history for the last 10 seconds
-            stateObj.history.push(currentUnderruns);
+            const underrunDuration = ctx.playbackStats.underrunDuration;
+            const totalDuration = ctx.playbackStats.totalDuration;
+
+            // Store raw cumulative snapshots; diff oldest vs current for a true windowed ratio
+            stateObj.history.push({ underrunDuration, totalDuration });
             if (stateObj.history.length > 100) {
                 stateObj.history.shift();
             }
-            let actualUnderrunsPerSec = 0;
-            if (stateObj.history.length > 10) {
-                actualUnderrunsPerSec = stateObj.history[0] - stateObj.history[9];
-                
-                for (let i = 10; i + 10 < stateObj.history.length; i+=10) {
-                    // Weighted average to smooth out short-term spikes
-                    actualUnderrunsPerSec = (stateObj.history[i + 10] - stateObj.history[i]) * 0.6 + actualUnderrunsPerSec * 0.4;
+
+            let actualUnderrunRatio = 0;
+            if (stateObj.history.length >= 2) {
+                const deltaUnderrun = stateObj.history[1].underrunDuration - stateObj.history[0].underrunDuration;
+                const deltaTotal = stateObj.history[1].totalDuration - stateObj.history[0].totalDuration;
+                actualUnderrunRatio = deltaTotal > 0 ? deltaUnderrun / deltaTotal : 0;
+
+                for (let i = 0; i + 1 < stateObj.history.length; i++) {
+                    const deltaUnderrun = stateObj.history[i + 1].underrunDuration - stateObj.history[i].underrunDuration;
+                    const deltaTotal = stateObj.history[i + 1].totalDuration - stateObj.history[i].totalDuration;
+                    if (deltaTotal > 0) {
+                        // Exponential moving average to smooth out ratio
+                        actualUnderrunRatio = actualUnderrunRatio * 0.49 + (deltaUnderrun / deltaTotal) * 0.51;
+                    }
                 }
             }
-            const underrunsLast10s = currentUnderruns - stateObj.history[0];
 
-            const maxUnderrunsPerSec = 100; // Safe assumed max independent glitches per second
-            const targetDelta = (targetPercentage / 100) * maxUnderrunsPerSec;
+            const oldest = stateObj.history[0];
+            const deltaUnderrun = underrunDuration - oldest.underrunDuration;
+            const deltaTotal = totalDuration - oldest.totalDuration;
 
             // --- THE FEEDBACK LOOP ---
-            // Evaluates actual underruns against expected underruns and adjusts iterations.
-            if (hasStats && targetPercentage > 0 && glitchNode) {
-                if (actualUnderrunsPerSec < targetDelta * 0.5 && underrunsLast10s < 2) {
-                    // If we're significantly under target and haven't had at least 2 underruns in the last 10s, increase iterations more aggressively
-                    stateObj.currentIterations = Math.min(stateObj.currentIterations * 1.03, 100000000);
-                } else if (actualUnderrunsPerSec < targetDelta * 0.6) {
-                    stateObj.currentIterations = Math.min(stateObj.currentIterations * 1.005, 100000000);
-                } else if (actualUnderrunsPerSec > targetDelta * 1.4) {
-                    stateObj.currentIterations = Math.max(stateObj.currentIterations * 0.995, 1000);
+            // Evaluates actual underrun ratio against target and adjusts iterations.
+            if (targetRatio > 0 && glitchNode) {
+                if (targetRatio > 0 && actualUnderrunRatio === 0) {
+                    stateObj.currentIterations = stateObj.currentIterations * 1.03;
+                } else if (actualUnderrunRatio < targetRatio * 0.6) {
+                    stateObj.currentIterations = stateObj.currentIterations * 1.005;
+                } else if (actualUnderrunRatio > targetRatio * 1.4) {
+                    stateObj.currentIterations = stateObj.currentIterations * 0.995;
                 }
             }
 
@@ -363,13 +397,12 @@
 
 
             // Render stats text
-            outElement.innerText = 
-`Target Glitch %   : ${targetPercentage.toFixed(1)}%
-Target Underruns/s: ${targetDelta.toFixed(1)}
-Actual Underruns/s: ${hasStats ? actualUnderrunsPerSec.toFixed(1) : 'N/A'}
-Underruns (10s)   : ${hasStats ? underrunsLast10s : 'N/A'}
-Total Underruns   : ${hasStats ? currentUnderruns : 'N/A (No API Support)'}
-Stall Iterations  : ${Math.round(stateObj.currentIterations)}`;
+            outElement.innerText =
+                `Target Glitch Percentage: ${(targetRatio * 100).toFixed(2)}%
+Actual Glitch Percentage: ${(actualUnderrunRatio * 100).toFixed(2)}%
+Underrun Duration  : ${underrunDuration.toFixed(3)} s
+Total Duration     : ${totalDuration.toFixed(3)} s
+Stall Iterations   : ${Math.round(stateObj.currentIterations)}`;
         }
 
         async function fetchWebRTCStats() {
@@ -381,8 +414,8 @@ Stall Iterations  : ${Math.round(stateObj.currentIterations)}`;
             });
 
             if (inboundStats) {
-                webrtcStatsOut.innerText = 
-`Packets Received : ${inboundStats.packetsReceived || 0}
+                webrtcStatsOut.innerText =
+                    `Packets Received : ${inboundStats.packetsReceived || 0}
 Packets Lost     : ${inboundStats.packetsLost || 0}
 Jitter Buffer (s): ${inboundStats.jitterBufferDelay ? (inboundStats.jitterBufferDelay / inboundStats.jitterBufferEmittedCount).toFixed(3) : 0}
 Concealed Samples: ${inboundStats.concealedSamples || 0}
@@ -394,15 +427,13 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
 
         function startStatsLoop() {
             if (statsInterval) clearInterval(statsInterval);
-            statsState.cap.lastUnderruns = 0;
             statsState.cap.history = [];
-            statsState.play.lastUnderruns = 0;
             statsState.play.history = [];
 
             statsInterval = setInterval(() => {
                 if (sourceAudio && !sourceAudio.paused) {
-                    updateAudioStats(capCtx, parseFloat(sliders.capGlitch.el.value), captureStatsOut, statsState.cap, captureGlitchNode);
-                    updateAudioStats(playCtx, parseFloat(sliders.playGlitch.el.value), playoutStatsOut, statsState.play, playoutGlitchNode);
+                    updateAudioStats(capCtx, parseFloat(sliders.capGlitch.el.value) / 100, captureStatsOut, statsState.cap, captureGlitchNode);
+                    updateAudioStats(playCtx, parseFloat(sliders.playGlitch.el.value) / 100, playoutStatsOut, statsState.play, playoutGlitchNode);
                     fetchWebRTCStats();
                 }
             }, 100); // Update every 0.1 second
@@ -423,13 +454,13 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
                 if (sourceAudio) { sourceAudio.pause(); sourceAudio.removeAttribute('src'); sourceAudio.load(); sourceAudio = null; }
                 if (capCtx) { await capCtx.close(); capCtx = null; }
                 if (playCtx) { await playCtx.close(); playCtx = null; }
-                
+
                 // 2. Initialize dual AudioContexts to isolate capture thread from playout thread
-                capCtx = new AudioContext({latencyHint: 'interactive'});
-                playCtx = new AudioContext({latencyHint: 'interactive'});
+                capCtx = new AudioContext({ latencyHint: 'interactive' });
+                playCtx = new AudioContext({ latencyHint: 'interactive' });
                 if (capCtx.state === 'suspended') await capCtx.resume().catch(e => console.warn(e));
                 if (playCtx.state === 'suspended') await playCtx.resume().catch(e => console.warn(e));
-                
+
                 // Load AudioWorklets
                 const blob = new Blob([workletCode], { type: 'application/javascript' });
                 const blobUrl = URL.createObjectURL(blob);
@@ -445,9 +476,8 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
 
                 // Calculate static initial probability
                 const getProb = (sliderVal, ctx) => {
-                    const targetPercentage = parseFloat(sliderVal);
-                    const targetDelta = (targetPercentage / 100) * 100;
-                    return (targetDelta / (ctx.sampleRate / 128)) * 100;
+                    const targetRatio = parseFloat(sliderVal) / 100;
+                    return targetRatio / (ctx.sampleRate / 128);
                 };
 
                 // 3. Setup Capture Audio Graph
@@ -459,7 +489,7 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
                 sourceNode.connect(captureGlitchNode).connect(streamDest);
 
                 // 4. Setup WebRTC Loopback
-                pc1 = new RTCPeerConnection(); 
+                pc1 = new RTCPeerConnection();
                 pc2 = new RTCPeerConnection({ encodedInsertableStreams: true });
 
                 const iceQueue1 = [];
@@ -490,7 +520,7 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
                     const codecs = capabilities.codecs;
                     const preferred = codecSelect.value;
                     let targetCodecs = [];
-                    
+
                     if (preferred === 'red') {
                         const red = codecs.find(c => c.mimeType.toLowerCase() === 'audio/red');
                         const opus = codecs.find(c => c.mimeType.toLowerCase() === 'audio/opus');
@@ -500,7 +530,7 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
                         const opus = codecs.find(c => c.mimeType.toLowerCase() === 'audio/opus');
                         if (opus) targetCodecs.push(opus);
                     }
-                    
+
                     codecs.forEach(c => {
                         if (!targetCodecs.includes(c)) targetCodecs.push(c);
                     });
@@ -510,7 +540,7 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
                 // Receive stream
                 pc2.ontrack = async (e) => {
                     const receiver = e.receiver;
-                    
+
                     // --- INSERTABLE STREAMS: Packet Loss & Jitter ---
                     if (receiver.createEncodedStreams) {
                         const streams = receiver.createEncodedStreams();
@@ -544,7 +574,7 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
 
                     dummyAudio = new Audio();
                     dummyAudio.srcObject = remoteStream;
-                    dummyAudio.muted = true; 
+                    dummyAudio.muted = true;
                     dummyAudio.play().catch(e => console.warn("[Simulator] Dummy Audio autoplay prevented until user interaction."));
 
                     const remoteSource = playCtx.createMediaStreamSource(remoteStream);
@@ -552,7 +582,7 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
                     playoutGlitchNode.parameters.get('glitchProbability').value = getProb(sliders.playGlitch.el.value, playCtx);
                     playoutGlitchNode.parameters.get('stallIterations').value = statsState.play.currentIterations;
                     analyser = playCtx.createAnalyser();
-                    
+
                     analyser.fftSize = 2048;
 
                     remoteSource.connect(playoutGlitchNode).connect(analyser).connect(playCtx.destination);
@@ -569,13 +599,13 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
                 await pc2.setRemoteDescription(offer);
                 for (const c of iceQueue1) await pc2.addIceCandidate(c).catch(console.error);
                 iceQueue1.length = 0;
-                
+
                 const answer = await pc2.createAnswer();
                 await pc2.setLocalDescription(answer);
                 await pc1.setRemoteDescription(answer);
                 for (const c of iceQueue2) await pc1.addIceCandidate(c).catch(console.error);
                 iceQueue2.length = 0;
-                
+
                 startStatsLoop();
 
                 // Attempt to play (Catch autoplay blocks)
@@ -632,10 +662,10 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
                 playPauseBtn.disabled = false;
                 statusIndicator.className = "text-center flex-1 w-full px-4 py-2 rounded-full bg-blue-500/10 text-blue-400 text-sm font-semibold border border-blue-500/20 overflow-hidden text-ellipsis";
                 statusIndicator.innerText = "Downloading preset audio...";
-                
+
                 const response = await fetch(url);
                 if (!response.ok) throw new Error("Failed to fetch preset file. Check if '" + url + "' exists.");
-                
+
                 const blob = await response.blob();
                 currentFile = blob;
                 await initPipeline(blob);
@@ -662,13 +692,13 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
             params.set('jitter', sliders.jitter.el.value);
             params.set('playGlitch', sliders.playGlitch.el.value);
             params.set('codec', codecSelect.value);
-            
+
             if (presetSelect.value) {
                 params.set('preset', presetSelect.value);
             } else {
                 params.delete('preset');
             }
-            
+
             try {
                 window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`);
             } catch (e) {
@@ -685,7 +715,7 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
             if (params.has('jitter')) { sliders.jitter.el.value = params.get('jitter'); hasParams = true; }
             if (params.has('playGlitch')) { sliders.playGlitch.el.value = params.get('playGlitch'); hasParams = true; }
             if (params.has('codec')) { codecSelect.value = params.get('codec'); hasParams = true; }
-            
+
             // Trigger visual label updates manually
             if (hasParams) {
                 Object.keys(sliders).forEach(key => sliders[key].el.dispatchEvent(new Event('input')));
@@ -740,4 +770,5 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
         }
     </script>
 </body>
+
 </html>
