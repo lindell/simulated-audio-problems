@@ -349,8 +349,11 @@
             // --- THE FEEDBACK LOOP ---
             // Evaluates actual underruns against expected underruns and adjusts iterations.
             if (hasStats && targetPercentage > 0 && glitchNode) {
-                if (actualUnderrunsPerSec < targetDelta * 0.6) {
-                    stateObj.currentIterations = Math.min(stateObj.currentIterations * 1.005, 50000000);
+                if (actualUnderrunsPerSec < targetDelta * 0.5 && underrunsLast10s < 2) {
+                    // If we're significantly under target and haven't had at least 2 underruns in the last 10s, increase iterations more aggressively
+                    stateObj.currentIterations = Math.min(stateObj.currentIterations * 1.03, 100000000);
+                } else if (actualUnderrunsPerSec < targetDelta * 0.6) {
+                    stateObj.currentIterations = Math.min(stateObj.currentIterations * 1.005, 100000000);
                 } else if (actualUnderrunsPerSec > targetDelta * 1.4) {
                     stateObj.currentIterations = Math.max(stateObj.currentIterations * 0.995, 1000);
                 }
