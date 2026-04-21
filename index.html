@@ -253,7 +253,7 @@
             static get parameterDescriptors() {
                 return [
                     { name: 'glitchProbability', defaultValue: 0, minValue: 0, maxValue: 1 },
-                    { name: 'stallIterations', defaultValue: 500000, minValue: 0, maxValue: 100000000 }
+                    { name: 'stallIterations', defaultValue: 50000, minValue: 0, maxValue: 100000000 }
                 ];
             }
             process(inputs, outputs, parameters) {
@@ -280,7 +280,9 @@
                     // The main thread's feedback loop determines how many iterations are needed to cause exactly 1 underrun.
                     let dummy = 0;
                     for (let i = 0; i < iters; i++) {
-                        dummy += Math.sqrt(Math.random() + 1);
+                        for (let j = 0; j < 100; j++) {
+                            dummy += Math.sqrt(Math.random() + 1);
+                        }
                     }
                     
                     // Prevent V8 compiler from eliminating the dead loop
@@ -303,8 +305,8 @@
 
         // Tracks state for the feedback loop. currentIterations adjusts up/down to hit the target glitch %
         const statsState = {
-            cap: { history: [], currentIterations: 500000 },
-            play: { history: [], currentIterations: 500000 }
+            cap: { history: [], currentIterations: 50000 },
+            play: { history: [], currentIterations: 50000 }
         };
 
         function updatePlayPauseUI(playing) {
