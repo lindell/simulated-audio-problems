@@ -22,6 +22,10 @@
 
         <!-- Status & Upload -->
         <div class="bg-slate-800 p-6 rounded-xl shadow-lg border border-slate-700 flex flex-col gap-4">
+            <div id="unsupportedWarning" class="hidden w-full p-4 mb-2 rounded-md bg-red-500/20 text-red-400 border border-red-500/50 text-sm font-semibold text-center">
+                Your browser does not support WebRTC Insertable Streams (createEncodedStreams). Please use Chrome, Edge, or Opera.
+            </div>
+
             <div class="w-full flex flex-col sm:flex-row gap-4">
                 <div class="flex-1">
                     <label class="block text-sm font-medium text-slate-300 mb-2">Use Predefined Audio</label>
@@ -67,7 +71,7 @@
                         <span id="capGlitchVal" class="text-sm text-sky-400">0%</span>
                     </div>
                     <input type="range" id="capGlitchSlider" min="0" max="100" value="0" class="w-full">
-                    <p class="text-xs text-slate-500 mt-1">Intentionally stalls the capture audio thread to cause buffer underruns.</p>
+                    <p class="text-xs text-slate-500 mt-1">Stalls capture thread via dynamic feedback loop to cause underruns.</p>
                 </div>
             </div>
 
@@ -121,7 +125,7 @@
                         <span id="playGlitchVal" class="text-sm text-sky-400">0%</span>
                     </div>
                     <input type="range" id="playGlitchSlider" min="0" max="100" value="0" class="w-full">
-                    <p class="text-xs text-slate-500 mt-1">Intentionally stalls the playout audio thread to cause speaker buffer starvation.</p>
+                    <p class="text-xs text-slate-500 mt-1">Stalls playout thread via dynamic feedback loop to cause starvation.</p>
                 </div>
             </div>
         </div>
@@ -153,10 +157,13 @@
     </div>
 
     <script>
-        // Check for WebRTC Insertable Streams support
-        if (!('RTCRtpSender' in window) || !('createEncodedStreams' in RTCRtpSender.prototype)) {
-            alert("Your browser does not support WebRTC Insertable Streams (createEncodedStreams). Please use Chrome, Edge, or Opera.");
-        }
+        // Check for WebRTC Insertable Streams support safely
+        document.addEventListener('DOMContentLoaded', () => {
+            if (!('RTCRtpSender' in window) || !('createEncodedStreams' in RTCRtpSender.prototype)) {
+                document.getElementById('unsupportedWarning').classList.remove('hidden');
+                console.error("Browser does not support WebRTC Insertable Streams (createEncodedStreams).");
+            }
+        });
 
         // DOM Elements
         const fileInput = document.getElementById('audioInput');
@@ -186,9 +193,9 @@
                 sliders[key].val.innerText = e.target.value + suffix;
                 updateURL();
                 
-                // Directly map target percentage to worklet probability (no feedback loop)
+                // Directly map target percentage to worklet probability
                 const targetPercentage = parseFloat(e.target.value);
-                const targetDelta = (targetPercentage / 100) * 100; // 100 is max glitches per second
+                const targetDelta = (targetPercentage / 100) * 100; // 100 is roughly max underruns per second
 
                 if (key === 'capGlitch' && captureGlitchNode && capCtx) {
                     const prob = (targetDelta / (capCtx.sampleRate / 128)) * 100;
@@ -210,12 +217,13 @@
         resizeCanvas();
 
         // AudioWorklet Processor Code (Blob execution)
+        // Replaced stallMs with stallIterations for fine-grained feedback loop tuning
         const workletCode = `
         class GlitchProcessor extends AudioWorkletProcessor {
             static get parameterDescriptors() {
                 return [
                     { name: 'glitchProbability', defaultValue: 0, minValue: 0, maxValue: 100 },
-                    { name: 'stallMs', defaultValue: 15, minValue: 0, maxValue: 500 }
+                    { name: 'stallIterations', defaultValue: 500000, minValue: 0, maxValue: 100000000 }
                 ];
             }
             process(inputs, outputs, parameters) {
@@ -233,16 +241,20 @@
                     }
                 }
 
-                // We read element 0 safely
+                // Safely read dynamic parameters
                 const prob = parameters.glitchProbability && parameters.glitchProbability.length > 0 ? parameters.glitchProbability[0] : 0;
-                const stallMs = parameters.stallMs && parameters.stallMs.length > 0 ? parameters.stallMs[0] : 15;
+                const iters = parameters.stallIterations && parameters.stallIterations.length > 0 ? parameters.stallIterations[0] : 500000;
 
                 if (prob > 0 && Math.random() * 100 < prob) {
-                    // Intentionally stall the thread to cause an underrun/glitch.
-                    const start = Date.now();
-                    while (Date.now() - start < stallMs) {
-                        // Spin-wait lock to block the audio thread
+                    // Intentionally stall the thread using a calculated mathematical load.
+                    // The main thread's feedback loop determines how many iterations are needed to cause exactly 1 underrun.
+                    let dummy = 0;
+                    for (let i = 0; i < iters; i++) {
+                        dummy += Math.sqrt(Math.random() + 1);
                     }
+                    
+                    // Prevent V8 compiler from eliminating the dead loop
+                    if (dummy === -1) console.log(dummy);
                 }
 
                 return true;
@@ -259,9 +271,10 @@
         let currentFile = null;
         let statsInterval = null;
 
+        // Tracks state for the feedback loop. currentIterations adjusts up/down to hit the target glitch %
         const statsState = {
-            cap: { lastUnderruns: 0, history: [] },
-            play: { lastUnderruns: 0, history: [] }
+            cap: { lastUnderruns: 0, history: [], currentIterations: 500000 },
+            play: { lastUnderruns: 0, history: [], currentIterations: 500000 }
         };
 
         function updatePlayPauseUI(playing) {
@@ -305,8 +318,8 @@
             }
         });
 
-        // Display AudioPlaybackStats
-        function updateAudioStats(ctx, targetPercentage, outElement, stateObj) {
+        // Display AudioPlaybackStats and run Feedback Loop
+        function updateAudioStats(ctx, targetPercentage, outElement, stateObj, glitchNode) {
             if (!ctx) return;
             
             const hasStats = 'playbackStats' in ctx && ctx.playbackStats;
@@ -322,10 +335,24 @@
             }
             let underrunsLast10s = currentUnderruns - stateObj.history[0];
 
-            // Always assume >10ms causes a glitch
-            // This means maximum independent glitches per second is 100 (1000ms / 10ms)
-            const maxUnderrunsPerSec = 100; 
+            const maxUnderrunsPerSec = 100; // Safe assumed max independent glitches per second
             const targetDelta = (targetPercentage / 100) * maxUnderrunsPerSec;
+
+            // --- THE FEEDBACK LOOP ---
+            // Evaluates actual underruns against expected underruns and adjusts iterations.
+            if (hasStats && targetPercentage > 0 && glitchNode) {
+                if (actualUnderrunsPerSec < targetDelta * 0.8) {
+                    // We are not causing enough buffer starvations. 
+                    // The loop isn't doing enough work. Scale iterations up.
+                    stateObj.currentIterations = Math.min(stateObj.currentIterations * 1.5, 50000000);
+                    glitchNode.parameters.get('stallIterations').value = stateObj.currentIterations;
+                } else if (actualUnderrunsPerSec > targetDelta * 1.2) {
+                    // We are causing cascading buffer starvations (overshooting).
+                    // The loop is taking too long. Scale iterations down.
+                    stateObj.currentIterations = Math.max(stateObj.currentIterations * 0.8, 1000);
+                    glitchNode.parameters.get('stallIterations').value = stateObj.currentIterations;
+                }
+            }
 
             // Render stats text
             outElement.innerText = 
@@ -333,7 +360,8 @@
 Target Underruns/s: ${targetDelta.toFixed(1)}
 Actual Underruns/s: ${hasStats ? actualUnderrunsPerSec : 'N/A'}
 Underruns (10s)   : ${hasStats ? underrunsLast10s : 'N/A'}
-Total Underruns   : ${hasStats ? currentUnderruns : 'N/A (No API Support)'}`;
+Total Underruns   : ${hasStats ? currentUnderruns : 'N/A (No API Support)'}
+Stall Iterations  : ${Math.round(stateObj.currentIterations)}`;
         }
 
         async function fetchWebRTCStats() {
@@ -365,8 +393,8 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
 
             statsInterval = setInterval(() => {
                 if (sourceAudio && !sourceAudio.paused) {
-                    updateAudioStats(capCtx, parseFloat(sliders.capGlitch.el.value), captureStatsOut, statsState.cap);
-                    updateAudioStats(playCtx, parseFloat(sliders.playGlitch.el.value), playoutStatsOut, statsState.play);
+                    updateAudioStats(capCtx, parseFloat(sliders.capGlitch.el.value), captureStatsOut, statsState.cap, captureGlitchNode);
+                    updateAudioStats(playCtx, parseFloat(sliders.playGlitch.el.value), playoutStatsOut, statsState.play, playoutGlitchNode);
                     fetchWebRTCStats();
                 }
             }, 1000); // Update every 1 second
@@ -418,7 +446,7 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
                 const sourceNode = capCtx.createMediaElementSource(sourceAudio);
                 captureGlitchNode = new AudioWorkletNode(capCtx, 'glitch-processor');
                 captureGlitchNode.parameters.get('glitchProbability').value = getProb(sliders.capGlitch.el.value, capCtx);
-                captureGlitchNode.parameters.get('stallMs').value = 11;
+                captureGlitchNode.parameters.get('stallIterations').value = statsState.cap.currentIterations;
                 const streamDest = capCtx.createMediaStreamDestination();
                 sourceNode.connect(captureGlitchNode).connect(streamDest);
 
@@ -514,7 +542,7 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
                     const remoteSource = playCtx.createMediaStreamSource(remoteStream);
                     playoutGlitchNode = new AudioWorkletNode(playCtx, 'glitch-processor');
                     playoutGlitchNode.parameters.get('glitchProbability').value = getProb(sliders.playGlitch.el.value, playCtx);
-                    playoutGlitchNode.parameters.get('stallMs').value = 11;
+                    playoutGlitchNode.parameters.get('stallIterations').value = statsState.play.currentIterations;
                     analyser = playCtx.createAnalyser();
                     
                     analyser.fftSize = 2048;
