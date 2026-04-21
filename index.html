@@ -325,15 +325,23 @@
             const hasStats = 'playbackStats' in ctx && ctx.playbackStats;
             let currentUnderruns = hasStats ? (ctx.playbackStats.underrunEvents || 0) : 0;
             
-            let actualUnderrunsPerSec = currentUnderruns - stateObj.lastUnderruns;
             stateObj.lastUnderruns = currentUnderruns;
 
             // Track history for the last 10 seconds
             stateObj.history.push(currentUnderruns);
-            if (stateObj.history.length > 10) {
+            if (stateObj.history.length > 100) {
                 stateObj.history.shift();
             }
-            let underrunsLast10s = currentUnderruns - stateObj.history[0];
+            let actualUnderrunsPerSec = 0;
+            if (stateObj.history.length > 10) {
+                actualUnderrunsPerSec = stateObj.history[0] - stateObj.history[9];
+                
+                for (let i = 10; i + 10 < stateObj.history.length; i+=10) {
+                    // Weighted average to smooth out short-term spikes
+                    actualUnderrunsPerSec = (stateObj.history[i + 10] - stateObj.history[i]) * 0.6 + actualUnderrunsPerSec * 0.4;
+                }
+            }
+            const underrunsLast10s = currentUnderruns - stateObj.history[0];
 
             const maxUnderrunsPerSec = 100; // Safe assumed max independent glitches per second
             const targetDelta = (targetPercentage / 100) * maxUnderrunsPerSec;
@@ -341,24 +349,21 @@
             // --- THE FEEDBACK LOOP ---
             // Evaluates actual underruns against expected underruns and adjusts iterations.
             if (hasStats && targetPercentage > 0 && glitchNode) {
-                if (actualUnderrunsPerSec < targetDelta * 0.8) {
-                    // We are not causing enough buffer starvations. 
-                    // The loop isn't doing enough work. Scale iterations up.
-                    stateObj.currentIterations = Math.min(stateObj.currentIterations * 1.5, 50000000);
-                    glitchNode.parameters.get('stallIterations').value = stateObj.currentIterations;
-                } else if (actualUnderrunsPerSec > targetDelta * 1.2) {
-                    // We are causing cascading buffer starvations (overshooting).
-                    // The loop is taking too long. Scale iterations down.
-                    stateObj.currentIterations = Math.max(stateObj.currentIterations * 0.8, 1000);
-                    glitchNode.parameters.get('stallIterations').value = stateObj.currentIterations;
+                if (actualUnderrunsPerSec < targetDelta * 0.6) {
+                    stateObj.currentIterations = Math.min(stateObj.currentIterations * 1.005, 50000000);
+                } else if (actualUnderrunsPerSec > targetDelta * 1.4) {
+                    stateObj.currentIterations = Math.max(stateObj.currentIterations * 0.995, 1000);
                 }
             }
+
+            glitchNode.parameters.get('stallIterations').value = stateObj.currentIterations;
+
 
             // Render stats text
             outElement.innerText = 
 `Target Glitch %   : ${targetPercentage.toFixed(1)}%
 Target Underruns/s: ${targetDelta.toFixed(1)}
-Actual Underruns/s: ${hasStats ? actualUnderrunsPerSec : 'N/A'}
+Actual Underruns/s: ${hasStats ? actualUnderrunsPerSec.toFixed(1) : 'N/A'}
 Underruns (10s)   : ${hasStats ? underrunsLast10s : 'N/A'}
 Total Underruns   : ${hasStats ? currentUnderruns : 'N/A (No API Support)'}
 Stall Iterations  : ${Math.round(stateObj.currentIterations)}`;
@@ -397,7 +402,7 @@ Silent Concealed : ${inboundStats.silentConcealedSamples || 0}`;
                     updateAudioStats(playCtx, parseFloat(sliders.playGlitch.el.value), playoutStatsOut, statsState.play, playoutGlitchNode);
                     fetchWebRTCStats();
                 }
-            }, 1000); // Update every 1 second
+            }, 100); // Update every 0.1 second
         }
 
         async function initPipeline(file) {
